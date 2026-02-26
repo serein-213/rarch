@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # 触发条件：推送类似 v0.1.2 的 tag
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build and Upload
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - build: macos-intel
+            os: macos-latest
+            target: x86_64-apple-darwin
+          - build: macos-arm
+            os: macos-latest
+            target: aarch64-apple-darwin
+          - build: windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Build
+        # 编译时开启所有核心特性，提供开箱即用的完整体验
+        run: cargo build --release --target ${{ matrix.target }} --features "ui ai ai-native"
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          tar -czvf rarch-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release rarch
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Compress-Archive -Path target\${{ matrix.target }}\release\rarch.exe -DestinationPath rarch-${{ matrix.target }}.zip
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rarch-${{ matrix.target }}.tar.gz
+            rarch-${{ matrix.target }}.zip
