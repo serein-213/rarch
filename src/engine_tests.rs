@@ -12,18 +12,24 @@ mod tests {
         let engine = Engine::new(config, PathBuf::from("."));
         let path = PathBuf::from("test.txt");
         
-        let mut rule = Rule::default();
-        rule.target = "${ext}/${name}_copy".to_string();
+        let rule = Rule {
+            target: "${ext}/${name}_copy".to_string(),
+            ..Default::default()
+        };
         let resolved = engine.resolve_placeholders::<fn(&str)>(&rule, &path, None);
         assert_eq!(resolved, "txt/test_copy");
 
-        let mut rule2 = Rule::default();
-        rule2.target = "${year}-${month}".to_string();
+        let rule2 = Rule {
+            target: "${year}-${month}".to_string(),
+            ..Default::default()
+        };
         let resolved = engine.resolve_placeholders::<fn(&str)>(&rule2, &path, None);
         assert!(resolved.contains("${year}") || resolved.len() == 7);
 
-        let mut rule3 = Rule::default();
-        rule3.target = "backup/${filename}".to_string();
+        let rule3 = Rule {
+            target: "backup/${filename}".to_string(),
+            ..Default::default()
+        };
         let resolved = engine.resolve_placeholders::<fn(&str)>(&rule3, &path, None);
         assert_eq!(resolved, "backup/test.txt");
     }

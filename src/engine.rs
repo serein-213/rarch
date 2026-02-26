@@ -263,7 +263,7 @@ impl Engine {
                     if op.from.exists() {
                         let res = std::fs::remove_file(&op.from)
                             .and_then(|_| std::fs::hard_link(original_path, &final_to));
-                        res.map_err(|e| fs_extra::error::Error::from(e))
+                        res.map_err(fs_extra::error::Error::from)
                     } else {
                         Ok(())
                     }

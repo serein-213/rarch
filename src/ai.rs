@@ -93,7 +93,7 @@ Only answer YES or NO.";
             max_tokens: 10,
             messages: vec![
                 Message { role: "system".into(), content: system_msg.into() },
-                Message { role: "user".into(), content: user_msg.into() },
+                Message { role: "user".into(), content: user_msg },
             ],
         };
 
@@ -101,20 +101,14 @@ Only answer YES or NO.";
         match self.client.post(url).json(&body).send() {
             Ok(res) => {
                 if let Ok(data) = res.json::<ChatResponse>() {
-                    let ans = data.choices.get(0).map(|c| c.message.content.trim().to_uppercase());
+                    let ans = data.choices.first().map(|c| c.message.content.trim().to_uppercase());
                     if let Some(a) = ans {
                         if a.contains("YES") {
                             if let Some(ref cb) = reporter { cb(&format!("[AI-Match] YES ({})", file_name)); } else { println!("  [AI] Result: YES"); }
                             return true;
-                        } else {
-                            if let Some(ref cb) = reporter { cb(&format!("[AI-Match] NO ({})", file_name)); } else { println!("  [AI] Result: NO ({})", a); }
-                        }
-                    } else {
-                        if let Some(ref cb) = reporter { cb("[AI-Match] Invalid response"); } else { println!("  [AI] Result: INVALID RESPONSE"); }
-                    }
-                } else {
-                    if let Some(ref cb) = reporter { cb("[AI-Match] Parse error"); } else { println!("  [AI] Result: JSON PARSE ERROR"); }
-                }
+                        } else if let Some(ref cb) = reporter { cb(&format!("[AI-Match] NO ({})", file_name)); } else { println!("  [AI] Result: NO ({})", a); }
+                    } else if let Some(ref cb) = reporter { cb("[AI-Match] Invalid response"); } else { println!("  [AI] Result: INVALID RESPONSE"); }
+                } else if let Some(ref cb) = reporter { cb("[AI-Match] Parse error"); } else { println!("  [AI] Result: JSON PARSE ERROR"); }
                 false
             }
             Err(e) => {
@@ -163,7 +157,7 @@ Rules:
             max_tokens: 30,
             messages: vec![
                 Message { role: "system".into(), content: system_msg.into() },
-                Message { role: "user".into(), content: user_msg.into() },
+                Message { role: "user".into(), content: user_msg },
             ],
         };
 
@@ -171,7 +165,7 @@ Rules:
         match self.client.post(url).json(&body).send() {
             Ok(res) => {
                 if let Ok(data) = res.json::<ChatResponse>() {
-                    let ans = data.choices.get(0).map(|c| c.message.content.trim().to_string());
+                    let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
                     if let Some(a) = ans {
                         // Clean up the name a bit
                         let mut name = a.replace(" ", "_");
