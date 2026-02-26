@@ -92,7 +92,7 @@ pub fn run_ui(path: PathBuf) -> anyhow::Result<()> {
                             let engine = Engine::new(config, path.clone());
                             
                             logs.push("Executing reorganization...".to_string());
-                            let run_result = engine.execute(|pos, total, msg| {
+                            let run_result = engine.execute(Some(PathBuf::from("rarch_journal.json")), |pos, total, msg| {
                                 progress = ((pos as f32 / total as f32) * 100.0) as u16;
                                 // We can't easily push to logs here because terminal.draw is blocking
                                 // but for a simple UI it's fine for now if we don't redraw mid-loop

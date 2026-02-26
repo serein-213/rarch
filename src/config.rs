@@ -15,7 +15,7 @@ pub enum ConflictStrategy {
     Skip,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Rule {
     #[allow(dead_code)]
     pub name: String,

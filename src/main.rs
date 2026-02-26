@@ -3,6 +3,9 @@ mod engine;
 mod journal;
 mod ui;
 
+#[cfg(test)]
+mod engine_tests;
+
 use clap::{Parser, Subcommand};
 use comfy_table::Table;
 use config::Config;
@@ -157,7 +160,8 @@ fn main() -> anyhow::Result<()> {
                     .progress_chars("##-"),
                 );
 
-                let journal = engine.execute(|pos, _total, msg| {
+                let journal_path = PathBuf::from("rarch_journal.json");
+                let journal = engine.execute(Some(journal_path.clone()), |pos, _total, msg| {
                     pb.set_position(pos as u64);
                     pb.set_message(msg);
                 })?;
@@ -168,7 +172,9 @@ fn main() -> anyhow::Result<()> {
                     println!("No actions were performed.");
                 } else {
                     println!("\nSuccessfully organized {} files.", journal.operations.len());
-                    journal.save(PathBuf::from("rarch_journal.json"))?;
+                    // Journal is already saved incrementally by engine.execute, 
+                    // but we can still save the full journal for historical backup if we like.
+                    journal.save(journal_path.clone())?;
                     println!(
                         "Journal saved to rarch_journal.json. You can undo this with 'rarch undo'."
                     );
@@ -204,6 +210,9 @@ fn main() -> anyhow::Result<()> {
             let mut watcher = notify::RecommendedWatcher::new(tx, NotifyConfig::default())?;
             watcher.watch(&path, RecursiveMode::NonRecursive)?;
 
+            let mut journal = JournalEntry::new();
+            let journal_path = PathBuf::from("rarch_journal.json");
+
             println!(
                 "Watching {:?} for new files... (Press Ctrl+C to stop)",
                 path
@@ -214,19 +223,26 @@ fn main() -> anyhow::Result<()> {
                     Ok(event) => {
                         if event.kind.is_create() || event.kind.is_modify() {
                             for file_path in event.paths {
-                                if let Ok(Some(op)) = engine.process_single_file(file_path.clone())
+                                if let Ok(Some(mut op)) = engine.process_single_file(file_path.clone())
                                 {
                                     let options = CopyOptions::new();
                                     let target_parent = op.to.parent().unwrap();
                                     if !target_parent.exists() {
-                                        std::fs::create_dir_all(target_parent)?;
+                                        let _ = std::fs::create_dir_all(target_parent);
                                     }
-                                    if move_file(&op.from, &op.to, &options).is_ok() {
-                                        println!(
-                                            "Auto-organized: {:?} -> {:?}",
-                                            op.from.file_name().unwrap(),
-                                            op.to
-                                        );
+                                    
+                                    // Handle conflicts in Watch mode too
+                                    if let Ok(Some(final_to)) = engine.handle_conflict(&op) {
+                                        if move_file(&op.from, &final_to, &options).is_ok() {
+                                            op.to = final_to;
+                                            println!(
+                                                "Auto-organized: {:?} -> {:?}",
+                                                op.from.file_name().unwrap(),
+                                                op.to
+                                            );
+                                            journal.operations.push(op);
+                                            let _ = journal.save(journal_path.clone());
+                                        }
                                     }
                                 }
                             }

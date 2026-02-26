@@ -54,12 +54,13 @@ impl Engine {
                 from: path,
                 to: target_path,
                 op_type: OpType::Move, // In watch mode, we simplify to Move for now
+                rule_name: Some(rule.name.clone()),
             }));
         }
         Ok(None)
     }
 
-    fn resolve_placeholders(&self, pattern: &str, path: &Path) -> String {
+    pub fn resolve_placeholders(&self, pattern: &str, path: &Path) -> String {
         let mut resolved = pattern.to_string();
         
         // Extension replacement
@@ -126,6 +127,7 @@ impl Engine {
                                 from: path,
                                 to: target_path,
                                 op_type: OpType::HardLink(original_target.clone()),
+                                rule_name: Some(rule.name.clone()),
                             });
                         } else {
                             hashes.insert(hash, target_path.clone());
@@ -136,6 +138,7 @@ impl Engine {
                         from: path,
                         to: target_path,
                         op_type: OpType::Move,
+                        rule_name: Some(rule.name.clone()),
                     });
                 }
                 None
@@ -145,7 +148,7 @@ impl Engine {
         Ok(ops)
     }
 
-    pub fn execute<F>(&self, mut on_progress: F) -> anyhow::Result<JournalEntry>
+    pub fn execute<F>(&self, journal_path: Option<PathBuf>, mut on_progress: F) -> anyhow::Result<JournalEntry>
     where
         F: FnMut(usize, usize, String),
     {
@@ -157,38 +160,59 @@ impl Engine {
         for (i, op) in ops.into_iter().enumerate() {
             let target_parent = op.to.parent().expect("Target path has no parent");
             if !target_parent.exists() {
-                std::fs::create_dir_all(target_parent)?;
-            }
-
-            let final_to = self.handle_conflict(&op)?;
-            if final_to.is_none() {
-                on_progress(i + 1, total, format!("Skipped (Conflict): {:?}", op.from.file_name().unwrap()));
-                continue;
-            }
-            let final_to = final_to.unwrap();
-
-            match &op.op_type {
-                OpType::Move => {
-                    move_file(&op.from, &final_to, &options)?;
+                if let Err(e) = std::fs::create_dir_all(target_parent) {
+                   on_progress(i + 1, total, format!("Error (Dir): {:?}", e));
+                   continue;
                 }
+            }
+
+            let final_to = match self.handle_conflict(&op) {
+                Ok(Some(path)) => path,
+                Ok(None) => {
+                    on_progress(i + 1, total, format!("Skipped (Conflict): {:?}", op.from.file_name().unwrap()));
+                    continue;
+                }
+                Err(e) => {
+                    on_progress(i + 1, total, format!("Error (Conflict): {:?}", e));
+                    continue;
+                }
+            };
+
+            let op_result = match &op.op_type {
+                OpType::Move => move_file(&op.from, &final_to, &options).map(|_| ()),
                 OpType::HardLink(original_path) => {
                     if op.from.exists() {
-                        std::fs::remove_file(&op.from)?;
-                        std::fs::hard_link(original_path, &final_to)?;
+                        let res = std::fs::remove_file(&op.from)
+                            .and_then(|_| std::fs::hard_link(original_path, &final_to));
+                        res.map_err(|e| fs_extra::error::Error::from(e))
+                    } else {
+                        Ok(())
                     }
                 }
-            }
+            };
 
-            let mut final_op = op;
-            final_op.to = final_to;
-            on_progress(i + 1, total, format!("Done: {:?}", final_op.from.file_name().unwrap()));
-            journal.operations.push(final_op);
+            match op_result {
+                Ok(_) => {
+                    let mut final_op = op;
+                    final_op.to = final_to;
+                    on_progress(i + 1, total, format!("Done: {:?}", final_op.from.file_name().unwrap()));
+                    
+                    // Atomic-like append to file
+                    if let Some(path) = &journal_path {
+                        let _ = JournalEntry::append_to_file(path, &final_op);
+                    }
+                    journal.operations.push(final_op);
+                }
+                Err(e) => {
+                    on_progress(i + 1, total, format!("Error (Move): {:?} -> {:?} : {}", op.from, final_to, e));
+                }
+            }
         }
 
         Ok(journal)
     }
 
-    fn handle_conflict(&self, op: &Operation) -> anyhow::Result<Option<PathBuf>> {
+    pub(crate) fn handle_conflict(&self, op: &Operation) -> anyhow::Result<Option<PathBuf>> {
         if !op.to.exists() {
             return Ok(Some(op.to.clone()));
         }
