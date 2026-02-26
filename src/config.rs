@@ -20,8 +20,10 @@ pub struct Rule {
     #[allow(dead_code)]
     pub name: String,
     pub extensions: Option<Vec<String>>,
+    pub regex: Option<String>,
     pub target: String,
     pub min_size: Option<u64>,
+    pub max_age: Option<String>,
     pub mime: Option<String>,
     pub r#type: Option<String>,
     pub conflict: Option<ConflictStrategy>,

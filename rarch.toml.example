@@ -1,14 +1,22 @@
 [[rules]]
 name = "My Photos"
 type = "image" # The easy way: Automatically matches images based on content
-target = "organized/images"
+target = "organized/images/${year}" # Using placeholders
+conflict = "rename" # Handle duplicate names by adding a suffix
 
 [[rules]]
 name = "Documents"
 extensions = ["pdf", "docx", "txt", "md"] # The classic way: Match by specific extensions
 target = "organized/documents"
+max_age = "30d" # ONLY move files that are at least 30 days old (Archiving)
 
 [[rules]]
-name = "Advanced Stuff"
-mime = "application/x-executable" # The robust way: Match exact MIME types (Power users)
-target = "organized/system"
+name = "Project Files"
+regex = ".*-v\\d+\\.zip" # Match specific patterns like project-v1.zip
+target = "organized/archive/versions"
+
+[[rules]]
+name = "Big Binaries"
+mime = "application/x-executable" # The robust way: Match exact MIME types
+min_size = 10485760 # 10MB - only match large files
+target = "organized/large_binaries"

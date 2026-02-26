@@ -4,6 +4,7 @@ mod journal;
 mod ui;
 
 use clap::{Parser, Subcommand};
+use comfy_table::Table;
 use config::Config;
 use engine::Engine;
 use fs_extra::file::move_file;
@@ -64,12 +65,24 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         path: PathBuf,
     },
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: clap_complete::Shell,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Completions { shell } => {
+            use clap::CommandFactory;
+            let mut cmd = Cli::command();
+            let name = cmd.get_name().to_string();
+            clap_complete::generate(shell, &mut cmd, name, &mut std::io::stdout());
+            return Ok(());
+        }
         Commands::Run {
             config,
             path,
@@ -85,8 +98,34 @@ fn main() -> anyhow::Result<()> {
                 if ops.is_empty() {
                     println!("No files matched any rules.");
                 } else {
-                    for op in ops {
-                        println!("Match: {:?} -> {:?}", op.from, op.to);
+                    let mut table = Table::new();
+                    table.set_header(vec!["File", "Rule", "Action", "Target"]);
+                    
+                    let mut saved_space = 0u64;
+                    for op in &ops {
+                        let rule_name = engine.match_rule(&op.from).map(|r| r.name.as_str()).unwrap_or("Unknown");
+                        let action = match &op.op_type {
+                            OpType::Move => "Move",
+                            OpType::HardLink(_) => {
+                                if let Ok(meta) = std::fs::metadata(&op.from) {
+                                    saved_space += meta.len();
+                                }
+                                "Deduplicate"
+                            },
+                        };
+                        
+                        table.add_row(vec![
+                            op.from.file_name().unwrap().to_string_lossy().to_string(),
+                            rule_name.to_string(),
+                            action.to_string(),
+                            op.to.to_string_lossy().to_string(),
+                        ]);
+                    }
+                    println!("{table}");
+                    println!("\nSummary:");
+                    println!("  - Total files to process: {}", ops.len());
+                    if saved_space > 0 {
+                        println!("  - Potential space saved: {:.2} MB", saved_space as f64 / 1024.0 / 1024.0);
                     }
                 }
             } else {

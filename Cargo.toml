@@ -27,6 +27,9 @@ notify = "6.1.1"
 rayon = "1.10"
 ratatui = { version = "0.26", optional = true }
 crossterm = { version = "0.27", optional = true }
+regex = "1.12.3"
+comfy-table = "7.2.2"
+clap_complete = "4.5.66"
 
 [features]
 default = []

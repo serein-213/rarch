@@ -32,8 +32,10 @@ Most file organizers just move files by extension. **rarch** is designed for pow
 - **Atomic Undo**: Every operation is journaled. If you mess up your rules, `rarch undo` restores everything exactly where it was.
 - **Content-Aware**: Don't be fooled by extensions. rarch uses deep magic-number inspection to identify file types (e.g., identifies a `.txt` as a `.png`).
 - **Hard-link Deduplication**: Automatically detects identical files using SHA-256 and converts duplicates into **hard links**, saving storage instantly.
+- **Regex & Date Filters**: Organize files by complex patterns or age (e.g., "move files older than 30 days").
 - **Dynamic Organization**: Use placeholders like `${year}`, `${month}`, and `${ext}` in your target paths.
-- **Conflict Resolution**: Smart handling of existing files—choose between Rename (numbered suffix), Overwrite, or Skip.
+- **Professional Analytics**: Dry-run mode provides a detailed table summary and "Potential Space Saved" reports.
+- **Shell Completions**: Native support for Bash, Zsh, Fish, and PowerShell.
 - **Real-time Watch Mode**: Run `rarch watch` to handle files the moment they arrive.
 - **Interactive TUI**: A beautiful dashboard for those who prefer a keyboard-driven visual experience.
 

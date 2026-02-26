@@ -1,8 +1,10 @@
 use crate::config::{Config, Rule};
 use crate::journal::{JournalEntry, OpType, Operation};
+use chrono::{Duration, Utc};
 use fs_extra::file::move_file;
 use fs_extra::file::CopyOptions;
 use rayon::prelude::*;
+use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Read;
@@ -219,7 +221,7 @@ impl Engine {
         }
     }
 
-    fn match_rule(&self, path: &Path) -> Option<&Rule> {
+    pub fn match_rule(&self, path: &Path) -> Option<&Rule> {
         let metadata = std::fs::metadata(path).ok()?;
         let size = metadata.len();
 
@@ -285,15 +287,52 @@ impl Engine {
                 }
             }
 
+            // Check Regex-based matching (Advanced)
+            if !matched {
+                if let (Some(rule_regex), Some(filename)) = (&rule.regex, path.file_name().and_then(|s| s.to_str())) {
+                    if let Ok(re) = Regex::new(rule_regex) {
+                        if re.is_match(filename) {
+                            matched = true;
+                        }
+                    }
+                }
+            }
+
             if matched {
+                // Apply AND filters (Size, Age)
                 if let Some(min_size) = rule.min_size {
                     if size < min_size {
                         continue;
                     }
                 }
+
+                if let Some(max_age_str) = &rule.max_age {
+                    if let Some(duration) = self.parse_age(max_age_str) {
+                        if let Ok(modified) = metadata.modified() {
+                            let duration_since_mod = Utc::now().signed_duration_since(chrono::DateTime::<Utc>::from(modified));
+                            if duration_since_mod < duration {
+                                continue;
+                            }
+                        }
+                    }
+                }
+                
                 return Some(rule);
             }
         }
         None
+    }
+
+    fn parse_age(&self, s: &str) -> Option<Duration> {
+        let (num_part, unit_part) = s.split_at(s.len() - 1);
+        let num = num_part.parse::<i64>().ok()?;
+        match unit_part.to_lowercase().as_str() {
+            "d" => Some(Duration::days(num)),
+            "w" => Some(Duration::weeks(num)),
+            "m" => Some(Duration::days(num * 30)), // Rough month
+            "y" => Some(Duration::days(num * 365)), // Rough year
+            "h" => Some(Duration::hours(num)),
+            _ => None,
+        }
     }
 }
