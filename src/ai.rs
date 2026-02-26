@@ -1,3 +1,4 @@
+#[cfg(feature = "ai")]
 use std::path::Path;
 
 #[cfg(feature = "ai")]
@@ -204,6 +205,16 @@ Rules:
         }
         // Fallback to original stem if AI fails
         Path::new(file_name).file_stem().unwrap_or_default().to_string_lossy().to_string()
+    }
+
+    #[cfg(not(feature = "ai"))]
+    pub fn suggest_name<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> String 
+    where F: Fn(&str)
+    {
+        if let Some(ref cb) = reporter {
+            cb(&format!("[AI-Rename] Skipped (AI feature disabled) for '{}'", file_name));
+        }
+        std::path::Path::new(file_name).file_stem().unwrap_or_default().to_string_lossy().to_string()
     }
 
     /// Extract structured information from the file content based on a prompt.
