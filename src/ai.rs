@@ -70,16 +70,29 @@ impl AiOracle {
     pub fn matches_prompt<F>(&self, file_name: &str, content_snippet: Option<&str>, prompt: &str, reporter: Option<F>) -> bool 
     where F: Fn(&str)
     {
-        let system_msg = "Extract a binary classification (YES/NO) for the file. 
-Example 1: Crit: 'Invoice', File: 'scan_01.jpg', Content: 'Bill to John...' -> YES
-Example 2: Crit: 'Invoice', File: 'vacation.png', Content: 'Sunny beach...' -> NO
-Only answer YES or NO.";
+        let system_msg = "You are a strict binary classifier. Your task is to determine if a file matches a specific criteria based on its name and content snippet.
+Rules:
+1. You MUST answer with ONLY 'YES' or 'NO'.
+2. Do not provide any explanations or additional text.
+3. If the content snippet is insufficient but the filename strongly suggests a match, answer 'YES'.
+4. If you are completely unsure, answer 'NO'.
+
+Examples:
+Criteria: 'Invoice or Receipt'
+File: 'scan_01.jpg'
+Content: 'Bill to John Doe... Total: $50.00'
+Answer: YES
+
+Criteria: 'Invoice or Receipt'
+File: 'vacation_photo.png'
+Content: 'Sunny beach with palm trees...'
+Answer: NO";
         
-        let mut user_msg = format!("Crit: '{}', File: '{}'", prompt, file_name);
+        let mut user_msg = format!("Criteria: '{}'\nFile: '{}'", prompt, file_name);
         if let Some(snippet) = content_snippet {
-            user_msg.push_str(&format!(", Content: '{}...'", snippet.chars().take(200).collect::<String>()));
+            user_msg.push_str(&format!("\nContent: '{}...'", snippet.chars().take(300).collect::<String>()));
         }
-        user_msg.push_str(" -> ");
+        user_msg.push_str("\nAnswer:");
 
         if let Some(ref cb) = reporter {
             cb(&format!("[AI-Match] Querying for '{}'...", file_name));
@@ -137,19 +150,19 @@ Only answer YES or NO.";
         if let Some(ref cb) = reporter {
             cb(&format!("[AI-Rename] Analyzing '{}'...", file_name));
         }
-        let system_msg = "You are a professional file naming assistant. 
-Analyze the file content and context provided. 
-Generate a short, descriptive, and safe file name (slug) in Chinese or English. 
-Rules: 
-1. No spaces (use underscores or hyphens). 
-2. NO extension in the output. 
-3. Answer ONLY with the generated name.";
+        let system_msg = "You are a professional file naming assistant. Your task is to generate a highly descriptive, concise, and safe file name based on the provided context.
+Rules:
+1. Output ONLY the generated file name. No explanations, no quotes, no markdown.
+2. DO NOT include the file extension (e.g., output 'annual_report' instead of 'annual_report.pdf').
+3. Use ONLY alphanumeric characters, underscores (_), or hyphens (-). Replace spaces with underscores.
+4. Keep it concise but descriptive (ideally 2-5 words).
+5. If the language of the content is Chinese, you may output a Chinese filename (but still follow rule 3 for separators).";
         
-        let mut user_msg = format!("Goal: '{}', Current Name: '{}'", prompt, file_name);
+        let mut user_msg = format!("Naming Goal: '{}'\nCurrent Name: '{}'", prompt, file_name);
         if let Some(snippet) = content_snippet {
-            user_msg.push_str(&format!(", Context: '{}...'", snippet.chars().take(200).collect::<String>()));
+            user_msg.push_str(&format!("\nFile Content Snippet: '{}...'", snippet.chars().take(300).collect::<String>()));
         }
-        user_msg.push_str(" -> Suggest Name:");
+        user_msg.push_str("\nSuggested Name:");
 
         let body = ChatRequest {
             model: self.model.clone(),
