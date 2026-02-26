@@ -1,0 +1,14 @@
+[[rules]]
+name = "Images"
+extensions = ["jpg", "jpeg", "png", "gif", "webp"]
+target = "organized/images"
+
+[[rules]]
+name = "Documents"
+extensions = ["pdf", "docx", "txt", "md"]
+target = "organized/documents"
+
+[[rules]]
+name = "Archives"
+extensions = ["zip", "tar", "gz", "7z"]
+target = "organized/archives"

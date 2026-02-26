@@ -1,0 +1,9 @@
+[[rules]]
+name = "照片"
+extensions = ["jpg", "png", "heic"]
+target = "Pictures/Sorted"
+
+[[rules]]
+name = "文档"
+extensions = ["pdf", "docx"]
+target = "Documents/Work"

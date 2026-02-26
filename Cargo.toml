@@ -1,0 +1,33 @@
+[package]
+name = "rarch"
+version = "0.1.0"
+authors = ["Serein-213 <serein-213@foxmail.com>"]
+edition = "2021"
+description = "A blazing fast, content-aware, and atomic file organization tool with undo support."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/serein-213/rarch"
+readme = "README.md"
+keywords = ["file-organizer", "utility", "cli", "automation", "deduplication"]
+categories = ["command-line-utilities", "filesystem"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+walkdir = "2"
+anyhow = "1.0"
+fs_extra = "1.3"
+indicatif = "0.17"
+chrono = { version = "0.4", features = ["serde"] }
+serde_json = "1.0"
+infer = "0.19"
+sha2 = "0.10"
+hex = "0.4"
+notify = "6.1.1"
+rayon = "1.10"
+ratatui = { version = "0.26", optional = true }
+crossterm = { version = "0.27", optional = true }
+
+[features]
+default = []
+ui = ["ratatui", "crossterm"]
