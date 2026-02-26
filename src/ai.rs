@@ -1,4 +1,4 @@
-#[cfg(feature = "ai")]
+#[cfg(any(feature = "ai", feature = "ai-native"))]
 use std::path::Path;
 
 #[cfg(feature = "ai")]
@@ -36,17 +36,25 @@ struct Choice {
     message: Message,
 }
 
+#[cfg(feature = "ai-native")]
+use crate::native_model::NativeModel;
+
 #[allow(dead_code)]
 pub struct AiOracle {
     #[cfg(feature = "ai")]
     client: Client,
     api_base: String,
     model: String,
+    #[cfg(feature = "ai-native")]
+    native_model: Option<NativeModel>,
 }
 
 impl AiOracle {
     #[cfg(feature = "ai")]
-    pub fn new(api_base: String, model: String) -> Self {
+    pub fn new(api_base: String, model: String, _model_path: Option<String>, _tokenizer_path: Option<String>) -> Self {
+        #[cfg(feature = "ai-native")]
+        let native_model = NativeModel::new(_model_path, _tokenizer_path).ok();
+
         Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(120))
@@ -54,20 +62,33 @@ impl AiOracle {
                 .unwrap_or_default(),
             api_base,
             model,
+            #[cfg(feature = "ai-native")]
+            native_model,
         }
     }
 
     #[cfg(not(feature = "ai"))]
-    pub fn new(api_base: String, model: String) -> Self {
+    pub fn new(api_base: String, model: String, _model_path: Option<String>, _tokenizer_path: Option<String>) -> Self {
+        #[cfg(feature = "ai-native")]
+        let native_model = match NativeModel::new(_model_path, _tokenizer_path) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                println!("Failed to load native model: {}", e);
+                None
+            }
+        };
+
         Self {
             api_base,
             model,
+            #[cfg(feature = "ai-native")]
+            native_model,
         }
     }
 
     /// Ask the local LLM if a file matches a certain prompt.
     /// Returns true if the LLM responds with something like "YES".
-    #[cfg(feature = "ai")]
+    #[cfg(any(feature = "ai", feature = "ai-native"))]
     pub fn matches_prompt<F>(&self, file_name: &str, content_snippet: Option<&str>, prompt: &str, reporter: Option<F>) -> bool 
     where F: Fn(&str)
     {
@@ -91,7 +112,7 @@ Answer: NO";
         
         let mut user_msg = format!("Criteria: '{}'\nFile: '{}'", prompt, file_name);
         if let Some(snippet) = content_snippet {
-            user_msg.push_str(&format!("\nContent: '{}...'", snippet.chars().take(300).collect::<String>()));
+            user_msg.push_str(&format!("\nContent: '{}'", snippet.chars().take(300).collect::<String>()));
         }
         user_msg.push_str("\nAnswer:");
 
@@ -100,39 +121,66 @@ Answer: NO";
         } else {
             println!("  [AI] Query: '{}' for file '{}'...", prompt, file_name);
         }
-        
-        let body = ChatRequest {
-            model: self.model.clone(),
-            temperature: 0.1, // Keep it low for consistency
-            max_tokens: 10,
-            messages: vec![
-                Message { role: "system".into(), content: system_msg.into() },
-                Message { role: "user".into(), content: user_msg },
-            ],
-        };
 
-        let url = format!("{}/chat/completions", self.api_base);
-        match self.client.post(url).json(&body).send() {
-            Ok(res) => {
-                if let Ok(data) = res.json::<ChatResponse>() {
-                    let ans = data.choices.first().map(|c| c.message.content.trim().to_uppercase());
-                    if let Some(a) = ans {
-                        if a.contains("YES") {
-                            if let Some(ref cb) = reporter { cb(&format!("[AI-Match] YES ({})", file_name)); } else { println!("  [AI] Result: YES"); }
-                            return true;
-                        } else if let Some(ref cb) = reporter { cb(&format!("[AI-Match] NO ({})", file_name)); } else { println!("  [AI] Result: NO ({})", a); }
-                    } else if let Some(ref cb) = reporter { cb("[AI-Match] Invalid response"); } else { println!("  [AI] Result: INVALID RESPONSE"); }
-                } else if let Some(ref cb) = reporter { cb("[AI-Match] Parse error"); } else { println!("  [AI] Result: JSON PARSE ERROR"); }
-                false
+        #[cfg(feature = "ai-native")]
+        if let Some(ref native) = self.native_model {
+            match native.generate(system_msg, &user_msg) {
+                Ok(ans) => {
+                    let a = ans.trim().to_uppercase();
+                    println!("Native AI generated for match: {}", a);
+                    if a.contains("YES") {
+                        if let Some(ref cb) = reporter { cb(&format!("[AI-Match] YES ({})", file_name)); } else { println!("  [AI] Result: YES"); }
+                        return true;
+                    } else {
+                        if let Some(ref cb) = reporter { cb(&format!("[AI-Match] NO ({})", file_name)); } else { println!("  [AI] Result: NO ({})", a); }
+                        return false;
+                    }
+                }
+                Err(e) => {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Match] Native Error: {}", e)); } else { println!("  [AI] Native Error: {}", e); }
+                    return false;
+                }
             }
-            Err(e) => {
-                if let Some(ref cb) = reporter { cb(&format!("[AI-Match] Error: {}", e)); } else { println!("  [AI] Error: {}", e); }
-                false
-            } // Fallback to false if API fails
         }
+        
+        #[cfg(feature = "ai")]
+        {
+            let body = ChatRequest {
+                model: self.model.clone(),
+                temperature: 0.1, // Keep it low for consistency
+                max_tokens: 10,
+                messages: vec![
+                    Message { role: "system".into(), content: system_msg.into() },
+                    Message { role: "user".into(), content: user_msg },
+                ],
+            };
+
+            let url = format!("{}/chat/completions", self.api_base);
+            match self.client.post(url).json(&body).send() {
+                Ok(res) => {
+                    if let Ok(data) = res.json::<ChatResponse>() {
+                        let ans = data.choices.first().map(|c| c.message.content.trim().to_uppercase());
+                        if let Some(a) = ans {
+                            if a.contains("YES") {
+                                if let Some(ref cb) = reporter { cb(&format!("[AI-Match] YES ({})", file_name)); } else { println!("  [AI] Result: YES"); }
+                                return true;
+                            } else if let Some(ref cb) = reporter { cb(&format!("[AI-Match] NO ({})", file_name)); } else { println!("  [AI] Result: NO ({})", a); }
+                        } else if let Some(ref cb) = reporter { cb("[AI-Match] Invalid response"); } else { println!("  [AI] Result: INVALID RESPONSE"); }
+                    } else if let Some(ref cb) = reporter { cb("[AI-Match] Parse error"); } else { println!("  [AI] Result: JSON PARSE ERROR"); }
+                    false
+                }
+                Err(e) => {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Match] Error: {}", e)); } else { println!("  [AI] Error: {}", e); }
+                    false
+                } // Fallback to false if API fails
+            }
+        }
+        
+        #[cfg(not(feature = "ai"))]
+        false
     }
 
-    #[cfg(not(feature = "ai"))]
+    #[cfg(not(any(feature = "ai", feature = "ai-native")))]
     pub fn matches_prompt<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> bool 
     where F: Fn(&str)
     {
@@ -144,7 +192,7 @@ Answer: NO";
 
     /// Suggest a new name for the file based on its content and a description of the goal.
     /// Returns the suggested name without extension.
-    #[cfg(feature = "ai")]
+    #[cfg(any(feature = "ai", feature = "ai-native"))]
     pub fn suggest_name<F>(&self, file_name: &str, content_snippet: Option<&str>, prompt: &str, reporter: Option<F>) -> String 
     where F: Fn(&str)
     {
@@ -161,53 +209,73 @@ Rules:
         
         let mut user_msg = format!("Naming Goal: '{}'\nCurrent Name: '{}'", prompt, file_name);
         if let Some(snippet) = content_snippet {
-            user_msg.push_str(&format!("\nFile Content Snippet: '{}...'", snippet.chars().take(300).collect::<String>()));
+            user_msg.push_str(&format!("\nFile Content Snippet: '{}'", snippet.chars().take(300).collect::<String>()));
         }
         user_msg.push_str("\nSuggested Name:");
 
-        let body = ChatRequest {
-            model: self.model.clone(),
-            temperature: 0.3,
-            max_tokens: 30,
-            messages: vec![
-                Message { role: "system".into(), content: system_msg.into() },
-                Message { role: "user".into(), content: user_msg },
-            ],
-        };
+        #[cfg(feature = "ai-native")]
+        if let Some(ref native) = self.native_model {
+            if let Ok(ans) = native.generate(system_msg, &user_msg) {
+                let mut name = ans.replace(" ", "_");
+                if let Some(pos) = name.rfind('.') {
+                    name = name[..pos].to_string();
+                }
+                let clean_name = name.replace(".", "_")
+                                  .trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                                  .to_string();
+                if !clean_name.is_empty() {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Rename] Done: '{}' -> '{}'", file_name, clean_name)); } else { println!("  [AI-Rename] Suggested: '{}'", clean_name); }
+                    return clean_name;
+                }
+            }
+        }
 
-        let url = format!("{}/chat/completions", self.api_base);
-        match self.client.post(url).json(&body).send() {
-            Ok(res) => {
-                if let Ok(data) = res.json::<ChatResponse>() {
-                    let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
-                    if let Some(a) = ans {
-                        // Clean up the name a bit
-                        let mut name = a.replace(" ", "_");
-                        
-                        // If model included an extension (e.g. .txt), remove it
-                        if let Some(pos) = name.rfind('.') {
-                            name = name[..pos].to_string();
-                        }
-                        
-                        let clean_name = name.replace(".", "_")
-                                          .trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
-                                          .to_string();
-                        if !clean_name.is_empty() {
-                            if let Some(ref cb) = reporter { cb(&format!("[AI-Rename] Done: '{}' -> '{}'", file_name, clean_name)); } else { println!("  [AI-Rename] Suggested: '{}'", clean_name); }
-                            return clean_name;
+        #[cfg(feature = "ai")]
+        {
+            let body = ChatRequest {
+                model: self.model.clone(),
+                temperature: 0.3,
+                max_tokens: 30,
+                messages: vec![
+                    Message { role: "system".into(), content: system_msg.into() },
+                    Message { role: "user".into(), content: user_msg },
+                ],
+            };
+
+            let url = format!("{}/chat/completions", self.api_base);
+            match self.client.post(url).json(&body).send() {
+                Ok(res) => {
+                    if let Ok(data) = res.json::<ChatResponse>() {
+                        let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
+                        if let Some(a) = ans {
+                            // Clean up the name a bit
+                            let mut name = a.replace(" ", "_");
+                            
+                            // If model included an extension (e.g. .txt), remove it
+                            if let Some(pos) = name.rfind('.') {
+                                name = name[..pos].to_string();
+                            }
+                            
+                            let clean_name = name.replace(".", "_")
+                                              .trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                                              .to_string();
+                            if !clean_name.is_empty() {
+                                if let Some(ref cb) = reporter { cb(&format!("[AI-Rename] Done: '{}' -> '{}'", file_name, clean_name)); } else { println!("  [AI-Rename] Suggested: '{}'", clean_name); }
+                                return clean_name;
+                            }
                         }
                     }
                 }
-            }
-            Err(e) => {
-                if let Some(ref cb) = reporter { cb(&format!("[AI-Rename] Error: {}", e)); } else { println!("  [AI-Rename] Error: {}", e); }
+                Err(e) => {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Rename] Error: {}", e)); } else { println!("  [AI-Rename] Error: {}", e); }
+                }
             }
         }
         // Fallback to original stem if AI fails
         Path::new(file_name).file_stem().unwrap_or_default().to_string_lossy().to_string()
     }
 
-    #[cfg(not(feature = "ai"))]
+    #[cfg(not(any(feature = "ai", feature = "ai-native")))]
     pub fn suggest_name<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> String 
     where F: Fn(&str)
     {
@@ -219,7 +287,7 @@ Rules:
 
     /// Extract structured information from the file content based on a prompt.
     /// Returns the extracted string, or None if extraction fails.
-    #[cfg(feature = "ai")]
+    #[cfg(any(feature = "ai", feature = "ai-native"))]
     pub fn extract_info<F>(&self, file_name: &str, content_snippet: Option<&str>, prompt: &str, reporter: Option<F>) -> Option<String> 
     where F: Fn(&str)
     {
@@ -234,46 +302,62 @@ Rules:
         
         let mut user_msg = format!("Extraction Goal: '{}'\nFile Name: '{}'", prompt, file_name);
         if let Some(snippet) = content_snippet {
-            user_msg.push_str(&format!("\nFile Content Snippet: '{}...'", snippet.chars().take(400).collect::<String>()));
+            user_msg.push_str(&format!("\nFile Content Snippet: '{}'", snippet.chars().take(400).collect::<String>()));
         }
         user_msg.push_str("\nExtracted Value:");
 
-        let body = ChatRequest {
-            model: self.model.clone(),
-            temperature: 0.1,
-            max_tokens: 50,
-            messages: vec![
-                Message { role: "system".into(), content: system_msg.into() },
-                Message { role: "user".into(), content: user_msg },
-            ],
-        };
+        #[cfg(feature = "ai-native")]
+        if let Some(ref native) = self.native_model {
+            if let Ok(ans) = native.generate(system_msg, &user_msg) {
+                if ans == "UNKNOWN" || ans.is_empty() {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Failed to extract for '{}'", file_name)); }
+                    return None;
+                }
+                let clean_val = ans.replace("\n", " ").trim().to_string();
+                if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Done: '{}' -> '{}'", file_name, clean_val)); }
+                return Some(clean_val);
+            }
+        }
 
-        let url = format!("{}/chat/completions", self.api_base);
-        match self.client.post(url).json(&body).send() {
-            Ok(res) => {
-                if let Ok(data) = res.json::<ChatResponse>() {
-                    let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
-                    if let Some(a) = ans {
-                        if a == "UNKNOWN" || a.is_empty() {
-                            if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Failed to extract for '{}'", file_name)); }
-                            return None;
+        #[cfg(feature = "ai")]
+        {
+            let body = ChatRequest {
+                model: self.model.clone(),
+                temperature: 0.1,
+                max_tokens: 50,
+                messages: vec![
+                    Message { role: "system".into(), content: system_msg.into() },
+                    Message { role: "user".into(), content: user_msg },
+                ],
+            };
+
+            let url = format!("{}/chat/completions", self.api_base);
+            match self.client.post(url).json(&body).send() {
+                Ok(res) => {
+                    if let Ok(data) = res.json::<ChatResponse>() {
+                        let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
+                        if let Some(a) = ans {
+                            if a == "UNKNOWN" || a.is_empty() {
+                                if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Failed to extract for '{}'", file_name)); }
+                                return None;
+                            }
+                            
+                            // Clean up the extracted value
+                            let clean_val = a.replace("\n", " ").trim().to_string();
+                            if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Done: '{}' -> '{}'", file_name, clean_val)); }
+                            return Some(clean_val);
                         }
-                        
-                        // Clean up the extracted value
-                        let clean_val = a.replace("\n", " ").trim().to_string();
-                        if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Done: '{}' -> '{}'", file_name, clean_val)); }
-                        return Some(clean_val);
                     }
                 }
-            }
-            Err(e) => {
-                if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Error: {}", e)); }
+                Err(e) => {
+                    if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Error: {}", e)); }
+                }
             }
         }
         None
     }
 
-    #[cfg(not(feature = "ai"))]
+    #[cfg(not(any(feature = "ai", feature = "ai-native")))]
     pub fn extract_info<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> Option<String> 
     where F: Fn(&str)
     {

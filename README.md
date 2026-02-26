@@ -38,11 +38,19 @@ Most file organizers just move files by extension. **rarch** is designed for pow
 - **Shell Completions**: Native support for Bash, Zsh, Fish, and PowerShell.
 - **Real-time Watch Mode**: Run `rarch watch` to handle files the moment they arrive.
 - **Interactive TUI**: A beautiful dashboard for those who prefer a keyboard-driven visual experience.
+- **AI-Powered Engine**: Supports Native Offline AI (zero setup, out-of-the-box) or API AI (connects to local LLMs like Ollama) for smart classification, renaming, and content extraction.
 
 ## Installation
 
 ```bash
+# Basic installation (includes TUI)
 cargo install rarch --features ui
+
+# Enable Native Offline AI (Out-of-the-box, auto-downloads model)
+cargo install rarch --features "ui ai-native"
+
+# Enable API AI (Requires local server like Ollama)
+cargo install rarch --features "ui ai"
 ```
 
 ## Usage
@@ -59,11 +67,10 @@ target = "Pictures/${year}"
 conflict = "rename"
 
 [[rules]]
-name = "PDFs"
-type = "document"
-extensions = ["pdf"]
-target = "Archives/Documents"
-conflict = "skip"
+name = "Smart Invoice Extraction"
+ai_extract = { company = "Extract the company name from the invoice" }
+target = "Finance/${ai_company}/${year}"
+extensions = ["txt", "pdf"]
 ```
 
 ### 🛠️ 2. Organize

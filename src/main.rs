@@ -3,6 +3,8 @@ mod config;
 mod engine;
 mod journal;
 mod ui;
+#[cfg(feature = "ai-native")]
+mod native_model;
 
 #[cfg(test)]
 mod engine_tests;

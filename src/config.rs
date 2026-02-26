@@ -8,6 +8,10 @@ pub struct Config {
     pub ai_api_base: String,
     #[serde(default = "default_model")]
     pub ai_model: String,
+    
+    // Native AI configuration
+    pub ai_model_path: Option<String>,
+    pub ai_tokenizer_path: Option<String>,
 }
 
 fn default_api_base() -> String {

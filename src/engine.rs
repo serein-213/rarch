@@ -21,10 +21,15 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(config: Config, base_dir: PathBuf) -> Self {
-        let ai = Arc::new(if config.ai_api_base.is_empty() {
+        let ai = Arc::new(if config.ai_api_base.is_empty() && config.ai_model_path.is_none() {
             None
         } else {
-            Some(AiOracle::new(config.ai_api_base.clone(), config.ai_model.clone()))
+            Some(AiOracle::new(
+                config.ai_api_base.clone(), 
+                config.ai_model.clone(),
+                config.ai_model_path.clone(),
+                config.ai_tokenizer_path.clone()
+            ))
         });
         Self {
             config: Arc::new(config),

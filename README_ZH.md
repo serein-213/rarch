@@ -38,11 +38,19 @@
 - **多壳补全**: 自动生成 Bash, Zsh, Fish 和 PowerShell 的命令行补全脚本。
 - **实时守望模式**: 运行 `rarch watch` 监控目录，文件到达即刻处理。
 - **交互式仪表盘 (TUI)**: 为键盘发烧友设计的终端美学界面。
+- **AI 智能引擎**: 支持原生离线 AI（无需配置，开箱即用）或连接本地大模型（如 Ollama），实现基于文件内容的智能分类、重命名和信息提取。
 
 ## 安装
 
 ```bash
+# 基础安装（包含 TUI）
 cargo install rarch --features ui
+
+# 启用原生离线 AI 支持（开箱即用，自动下载模型）
+cargo install rarch --features "ui ai-native"
+
+# 启用 API AI 支持（需配合 Ollama 等本地服务）
+cargo install rarch --features "ui ai"
 ```
 
 ## 使用指南
@@ -59,11 +67,10 @@ target = "Pictures/${year}"
 conflict = "rename"
 
 [[rules]]
-name = "PDF文档"
-type = "document"
-extensions = ["pdf"]
-target = "Archives/Documents"
-conflict = "skip"
+name = "智能发票提取"
+ai_extract = { company = "提取发票中的公司名称" }
+target = "Finance/${ai_company}/${year}"
+extensions = ["txt", "pdf"]
 ```
 
 ### 2. 批量整理

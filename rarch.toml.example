@@ -22,8 +22,16 @@ min_size = 10485760 # 10MB - only match large files
 target = "organized/large_binaries"
 
 # --- AI Integration ---
-# (Requires local Ollama/OpenAI-compatible server)
-#
+# Rarch supports two AI modes:
+# 1. Native AI (Zero setup, runs locally via Candle)
+# 2. API AI (Connects to Ollama/OpenAI-compatible servers)
+
+# Native AI Configuration (Optional)
+# If not specified, Rarch will automatically download Qwen2-0.5B-Instruct.
+# ai_model_path = "/path/to/your/model.gguf"
+# ai_tokenizer_path = "/path/to/your/tokenizer.json"
+
+# API AI Configuration (Optional)
 # ai_api_base = "http://localhost:11434/v1"
 # ai_model = "qwen2:0.5b"
 #
@@ -36,4 +44,10 @@ target = "organized/large_binaries"
 # name = "Smart Renaming"
 # ai_rename_prompt = "Suggest a filename (Organization_Date)."
 # target = "organized/${ai_name}.${ext}"
+# extensions = ["txt", "pdf"]
+
+# [[rules]]
+# name = "Smart Extraction"
+# ai_extract = { company = "Extract the company name from the invoice" }
+# target = "organized/${ai_company}/${year}"
 # extensions = ["txt", "pdf"]

@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "filesystem"]
 default = []
 ui = ["ratatui", "crossterm"]
 ai = ["reqwest"]
-ai-native = ["candle-core", "candle-nn", "candle-transformers", "tokenizers"]
+ai-native = ["candle-core", "candle-nn", "candle-transformers", "tokenizers", "hf-hub"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -43,6 +43,7 @@ candle-core = { version = "0.8.0", optional = true }
 candle-nn = { version = "0.8.0", optional = true }
 candle-transformers = { version = "0.8.0", optional = true }
 tokenizers = { version = "0.21.0", optional = true }
+hf-hub = { version = "0.4.0", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
