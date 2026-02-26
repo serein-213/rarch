@@ -10,6 +10,8 @@ rarch_journal.json
 test_dir/
 watch_test/
 rarch_test/
+custom_test/
+rarch_custom.toml
 
 # IDE files
 .vscode/

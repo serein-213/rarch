@@ -14,19 +14,27 @@ Most file organizers just move files by extension. **rarch** is designed for pow
 
 ### Visuals
 
-![rarch UI](assets/rarch_tui.png)
-*rarch Interactive TUI Dashboard*
+<p align="center">
+  <img src="assets/rarch_tui.png" alt="rarch UI" width="80%">
+  <br>
+  <em>rarch Interactive TUI Dashboard</em>
+</p>
 
-![rarch CLI](assets/rarch_cli.png)
-*rarch CLI Running in Dry-Run Mode*
+<p align="center">
+  <img src="assets/rarch_cli.png" alt="rarch CLI" width="80%">
+  <br>
+  <em>rarch CLI Running in Dry-Run Mode</em>
+</p>
 
 ### Key Features
 
 - **Blazing Fast**: Powered by Rust and `rayon` for parallel processing. Scan and organize 100k+ files in seconds.
 - **Atomic Undo**: Every operation is journaled. If you mess up your rules, `rarch undo` restores everything exactly where it was.
 - **Content-Aware**: Don't be fooled by extensions. rarch uses deep magic-number inspection to identify file types (e.g., identifies a `.txt` as a `.png`).
-- **Intelligent Deduplication**: Automatically detects identical files using SHA-256 and converts duplicates into **hard links**, saving GBs of disk space instantly.
-- **Real-time Watch Mode**: Run `rarch watch` and never organize your Downloads folder again. It handles files the moment they arrive.
+- **Hard-link Deduplication**: Automatically detects identical files using SHA-256 and converts duplicates into **hard links**, saving storage instantly.
+- **Dynamic Organization**: Use placeholders like `${year}`, `${month}`, and `${ext}` in your target paths.
+- **Conflict Resolution**: Smart handling of existing files—choose between Rename (numbered suffix), Overwrite, or Skip.
+- **Real-time Watch Mode**: Run `rarch watch` to handle files the moment they arrive.
 - **Interactive TUI**: A beautiful dashboard for those who prefer a keyboard-driven visual experience.
 
 ## Installation
@@ -44,13 +52,16 @@ Create `rarch.toml`:
 ```toml
 [[rules]]
 name = "Photos"
-extensions = ["jpg", "png", "heic"]
-target = "Pictures/Sorted"
+mime = "image/*"
+target = "Pictures/${year}"
+conflict = "rename"
 
 [[rules]]
-name = "Documents"
-extensions = ["pdf", "docx"]
-target = "Documents/Work"
+name = "PDFs"
+type = "document"
+extensions = ["pdf"]
+target = "Archives/Documents"
+conflict = "skip"
 ```
 
 ### 🛠️ 2. Organize

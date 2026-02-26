@@ -8,6 +8,7 @@ use config::Config;
 use engine::Engine;
 use fs_extra::file::move_file;
 use fs_extra::file::CopyOptions;
+use indicatif::{ProgressBar, ProgressStyle};
 use journal::{JournalEntry, OpType};
 use notify::{Config as NotifyConfig, RecursiveMode, Watcher};
 use std::path::PathBuf;
@@ -36,6 +37,10 @@ enum Commands {
         /// Preview changes without executing
         #[arg(short, long)]
         dry_run: bool,
+
+        /// Automatically proceed with changes without confirmation
+        #[arg(short, long)]
+        yes: bool,
     },
     /// Undo the last organization operation
     Undo {
@@ -69,6 +74,7 @@ fn main() -> anyhow::Result<()> {
             config,
             path,
             dry_run,
+            yes,
         } => {
             let config = Config::from_file(config)?;
             let engine = Engine::new(config, path);
@@ -84,15 +90,45 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             } else {
-                let journal = engine.execute()?;
-                if journal.operations.is_empty() {
-                    println!("Done. No files were moved (they might already be organized or don't match any rules).");
-                } else {
-                    println!("Successfully organized files:");
-                    for op in &journal.operations {
-                        println!("  - {:?}", op.from.file_name().unwrap());
+                let ops = engine.dry_run()?;
+                if ops.is_empty() {
+                    println!("No files to move.");
+                    return Ok(());
+                }
+
+                if !yes {
+                    println!("About to move {} files.", ops.len());
+                    print!("Do you want to proceed? [y/N] ");
+                    use std::io::Write;
+                    std::io::stdout().flush()?;
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        println!("Aborted.");
+                        return Ok(());
                     }
-                    println!("Moved {} files total.", journal.operations.len());
+                }
+
+                let pb = ProgressBar::new(ops.len() as u64);
+                pb.set_style(
+                    ProgressStyle::with_template(
+                        "[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}",
+                    )
+                    .unwrap()
+                    .progress_chars("##-"),
+                );
+
+                let journal = engine.execute(|pos, _total, msg| {
+                    pb.set_position(pos as u64);
+                    pb.set_message(msg);
+                })?;
+
+                pb.finish_with_message("Done!");
+
+                if journal.operations.is_empty() {
+                    println!("No actions were performed.");
+                } else {
+                    println!("\nSuccessfully organized {} files.", journal.operations.len());
                     journal.save(PathBuf::from("rarch_journal.json"))?;
                     println!(
                         "Journal saved to rarch_journal.json. You can undo this with 'rarch undo'."

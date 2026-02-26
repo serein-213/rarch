@@ -1,14 +1,14 @@
 [[rules]]
-name = "Images"
-extensions = ["jpg", "jpeg", "png", "gif", "webp"]
+name = "My Photos"
+type = "image" # The easy way: Automatically matches images based on content
 target = "organized/images"
 
 [[rules]]
 name = "Documents"
-extensions = ["pdf", "docx", "txt", "md"]
+extensions = ["pdf", "docx", "txt", "md"] # The classic way: Match by specific extensions
 target = "organized/documents"
 
 [[rules]]
-name = "Archives"
-extensions = ["zip", "tar", "gz", "7z"]
-target = "organized/archives"
+name = "Advanced Stuff"
+mime = "application/x-executable" # The robust way: Match exact MIME types (Power users)
+target = "organized/system"

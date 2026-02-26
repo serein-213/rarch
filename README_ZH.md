@@ -14,19 +14,27 @@
 
 ### 视觉演示
 
-![rarch UI](assets/rarch_tui.png)
-*rarch 交互式 TUI 仪表盘*
+<p align="center">
+  <img src="assets/rarch_tui.png" alt="rarch UI" width="80%">
+  <br>
+  <em>rarch 交互式 TUI 仪表盘</em>
+</p>
 
-![rarch CLI](assets/rarch_cli.png)
-*rarch CLI 运行预览（Dry-Run）*
+<p align="center">
+  <img src="assets/rarch_cli.png" alt="rarch CLI" width="80%">
+  <br>
+  <em>rarch CLI 运行预览（Dry-Run）</em>
+</p>
 
 ### 核心特性
 
 - **极速引擎**: 由 Rust 和 `rayon` 驱动的并行处理逻辑。秒级完成 10 万级文件的扫描与归档。
 - **原子化撤销 (Undo)**: 每一笔移动都有交易级日志记录。如果发现规则写错，`rarch undo` 能将所有文件精准还原至原位。
 - **内容感知**: 拒绝后缀名欺骗。归藏利用深度二进制头（Magic Number）识别，即使 `.png` 被重命名为 `.txt` 也能准确归位。
-- **智能语义去重**: 自动检测内容完全一致的文件（基于 SHA-256），并通过创建**硬链接**（Hard Link）消除冗余，在不改变目录结构的前提下瞬间拯救硬盘空间。
-- **实时守望模式**: 运行 `rarch watch` 后，下载文件夹将从此告别混乱。文件在进入目录的瞬间即被自动组织。
+- **硬链接去重**: 自动检测内容完全一致的文件（基于 SHA-256），并通过创建**硬链接**（Hard Link）消除冗余，瞬间拯救空间。
+- **变量路径支持**: 目标路径支持 `${year}`, `${month}`, `${ext}` 等动态占位符。
+- **冲突解决策略**: 提供重命名（自动编号）、覆盖、跳过等多种策略处理同名文件。
+- **实时守望模式**: 运行 `rarch watch` 监控目录，文件到达即刻处理。
 - **交互式仪表盘 (TUI)**: 为键盘发烧友设计的终端美学界面。
 
 ## 安装
@@ -44,13 +52,16 @@ cargo install rarch --features ui
 ```toml
 [[rules]]
 name = "照片"
-extensions = ["jpg", "png", "heic"]
-target = "Pictures/Sorted"
+mime = "image/*"
+target = "Pictures/${year}"
+conflict = "rename"
 
 [[rules]]
-name = "文档"
-extensions = ["pdf", "docx"]
-target = "Documents/Work"
+name = "PDF文档"
+type = "document"
+extensions = ["pdf"]
+target = "Archives/Documents"
+conflict = "skip"
 ```
 
 ### 2. 批量整理

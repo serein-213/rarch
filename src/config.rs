@@ -6,13 +6,25 @@ pub struct Config {
     pub rules: Vec<Rule>,
 }
 
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictStrategy {
+    #[default]
+    Rename,
+    Overwrite,
+    Skip,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Rule {
     #[allow(dead_code)]
     pub name: String,
-    pub extensions: Vec<String>,
+    pub extensions: Option<Vec<String>>,
     pub target: String,
-    pub min_size: Option<u64>, // optional min size in bytes
+    pub min_size: Option<u64>,
+    pub mime: Option<String>,
+    pub r#type: Option<String>,
+    pub conflict: Option<ConflictStrategy>,
 }
 
 impl Config {

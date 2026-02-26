@@ -1,0 +1,27 @@
+# rarch (归藏) Project Rules
+
+## Development Environment
+- **Rust Edition:** 2021
+- **Key Crates:** `clap`, `serde`, `toml`, `walkdir`, `rayon`, `infer`, `notify`, `ratatui`
+- **Testing:** Always use `cargo test` and `cargo run -- run --dry-run` to verify logic.
+
+## Technical Priorities
+1. **Safety:** Do NOT implement destructive filesystem operations without a corresponding entry in `JournalEntry`.
+2. **Deterministic Dedup:** SHA-256 is the standard for content deduplication. Use `HardLink` where possible to save space.
+3. **MIME/Type Hierarchy:** Content detection overrides filename suffix.
+    - Rule Match Order: `mime` -> `type` -> `extensions`.
+
+## Coding Style
+- **Error Handling:** Use `anyhow::Result`.
+- **Naming:** Follow standard Rust `snake_case`.
+- **Parallelism:** Prefer `rayon` for scanning and hashing. Avoid manual `std::thread` where simple parallel iterators suffice.
+- **Paths:** Always use `PathBuf` for cross-platform compatibility.
+
+## UI/UX Rules
+- **No Emojis:** Keep the documentation professional and text-based.
+- **Bilingual:** Always update both `README.md` and `README_ZH.md`.
+- **TUI Features:** All UI code must be gated by `#[cfg(feature = "ui")]`.
+
+## Git/Context
+- Refer to `.agent.md` for deep architectural guidelines.
+- Commit messages should be clear (e.g., `feat: Add ${ext} placeholder to target resolving`).
