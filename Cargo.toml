@@ -1,6 +1,6 @@
 [package]
 name = "rarch"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Serein-213 <serein-213@foxmail.com>"]
 edition = "2021"
 description = "A blazing fast, content-aware, and atomic file organization tool with undo support."
