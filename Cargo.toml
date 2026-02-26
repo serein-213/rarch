@@ -10,6 +10,11 @@ readme = "README.md"
 keywords = ["file-organizer", "utility", "cli", "automation", "deduplication"]
 categories = ["command-line-utilities", "filesystem"]
 
+[features]
+default = []
+ui = ["ratatui", "crossterm"]
+ai = ["reqwest"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -29,11 +34,8 @@ ratatui = { version = "0.26", optional = true }
 crossterm = { version = "0.27", optional = true }
 regex = "1.12.3"
 comfy-table = "7.2.2"
+reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 clap_complete = "4.5.66"
 
 [dev-dependencies]
 tempfile = "3.10"
-
-[features]
-default = []
-ui = ["ratatui", "crossterm"]

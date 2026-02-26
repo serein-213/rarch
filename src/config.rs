@@ -1,9 +1,21 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct Config {
     pub rules: Vec<Rule>,
+    #[serde(default = "default_api_base")]
+    pub ai_api_base: String,
+    #[serde(default = "default_model")]
+    pub ai_model: String,
+}
+
+fn default_api_base() -> String {
+    "http://localhost:11434/v1".to_string()
+}
+
+fn default_model() -> String {
+    "qwen2:0.5b".to_string()
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -21,6 +33,8 @@ pub struct Rule {
     pub name: String,
     pub extensions: Option<Vec<String>>,
     pub regex: Option<String>,
+    pub ai_prompt: Option<String>,
+    pub ai_rename_prompt: Option<String>,
     pub target: String,
     pub min_size: Option<u64>,
     pub max_age: Option<String>,

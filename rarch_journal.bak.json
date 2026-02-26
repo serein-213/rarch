@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-27T01:38:03.873262378+08:00",
+  "operations": [
+    {
+      "from": "test_ai_dir/cat.txt",
+      "to": "test_ai_dir/output/Projects/cat.txt",
+      "op_type": "Move",
+      "rule_name": "Projects"
+    },
+    {
+      "from": "test_ai_dir/rarch.toml",
+      "to": "test_ai_dir/output/Projects/rarch.toml",
+      "op_type": "Move",
+      "rule_name": "Projects"
+    }
+  ]
+}

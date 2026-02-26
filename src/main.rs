@@ -1,3 +1,4 @@
+mod ai;
 mod config;
 mod engine;
 mod journal;
@@ -97,7 +98,15 @@ fn main() -> anyhow::Result<()> {
 
             if dry_run {
                 println!("--- Dry Run (No changes will be made) ---");
-                let ops = engine.dry_run()?;
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(ProgressStyle::with_template("{spinner:.green} {msg}").unwrap());
+                pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+                let ops = engine.dry_run(|curr, total, msg| {
+                    pb.set_message(format!("[{}/{}] {}", curr, total, msg));
+                })?;
+                pb.finish_and_clear();
+
                 if ops.is_empty() {
                     println!("No files matched any rules.");
                 } else {
@@ -106,7 +115,7 @@ fn main() -> anyhow::Result<()> {
                     
                     let mut saved_space = 0u64;
                     for op in &ops {
-                        let rule_name = engine.match_rule(&op.from).map(|r| r.name.as_str()).unwrap_or("Unknown");
+                        let rule_name = engine.match_rule::<fn(&str)>(&op.from, None).map(|r| r.name.as_str()).unwrap_or("Unknown");
                         let action = match &op.op_type {
                             OpType::Move => "Move",
                             OpType::HardLink(_) => {
@@ -132,7 +141,15 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             } else {
-                let ops = engine.dry_run()?;
+                let pb_dry = ProgressBar::new_spinner();
+                pb_dry.set_style(ProgressStyle::with_template("{spinner:.green} Analyzing files... {msg}").unwrap());
+                pb_dry.enable_steady_tick(std::time::Duration::from_millis(100));
+                
+                let ops = engine.dry_run(|curr, total, _| {
+                    pb_dry.set_message(format!("{}/{}", curr, total));
+                })?;
+                pb_dry.finish_and_clear();
+
                 if ops.is_empty() {
                     println!("No files to move.");
                     return Ok(());
@@ -223,7 +240,7 @@ fn main() -> anyhow::Result<()> {
                     Ok(event) => {
                         if event.kind.is_create() || event.kind.is_modify() {
                             for file_path in event.paths {
-                                if let Ok(Some(mut op)) = engine.process_single_file(file_path.clone())
+                                if let Ok(Some(mut op)) = engine.process_single_file::<fn(&str)>(file_path.clone(), None)
                                 {
                                     let options = CopyOptions::new();
                                     let target_parent = op.to.parent().unwrap();

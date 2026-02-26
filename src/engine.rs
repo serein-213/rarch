@@ -1,3 +1,4 @@
+use crate::ai::AiOracle;
 use crate::config::{Config, Rule};
 use crate::journal::{JournalEntry, OpType, Operation};
 use chrono::{Duration, Utc};
@@ -15,35 +16,32 @@ use walkdir::WalkDir;
 pub struct Engine {
     config: Arc<Config>,
     base_dir: PathBuf,
+    ai: Arc<Option<AiOracle>>,
 }
 
 impl Engine {
     pub fn new(config: Config, base_dir: PathBuf) -> Self {
+        let ai = Arc::new(if config.ai_api_base.is_empty() {
+            None
+        } else {
+            Some(AiOracle::new(config.ai_api_base.clone(), config.ai_model.clone()))
+        });
         Self {
             config: Arc::new(config),
             base_dir,
+            ai,
         }
     }
 
-    pub fn process_single_file(&self, path: PathBuf) -> anyhow::Result<Option<Operation>> {
+    pub fn process_single_file<F>(&self, path: PathBuf, reporter: Option<F>) -> anyhow::Result<Option<Operation>> 
+    where F: Fn(&str) + Clone
+    {
         if !path.is_file() {
             return Ok(None);
         }
 
-        if let Some(rule) = self.match_rule(&path) {
-            let target_pattern = &rule.target;
-            
-            // 1. Resolve placeholders like ${ext}, ${year}, ${month}
-            let resolved_target = self.resolve_placeholders(target_pattern, &path);
-            
-            // 2. Handle Absolute vs Relative paths
-            let target_dir = if Path::new(&resolved_target).is_absolute() {
-                PathBuf::from(resolved_target)
-            } else {
-                self.base_dir.join(resolved_target)
-            };
-
-            let target_path = target_dir.join(path.file_name().unwrap());
+        if let Some(rule) = self.match_rule(&path, reporter.clone()) {
+            let target_path = self.resolve_target_path(rule, &path, reporter);
 
             // Avoid moving if it's already in the right place
             if path == target_path {
@@ -60,9 +58,71 @@ impl Engine {
         Ok(None)
     }
 
-    pub fn resolve_placeholders(&self, pattern: &str, path: &Path) -> String {
-        let mut resolved = pattern.to_string();
+    fn resolve_target_path<F>(&self, rule: &Rule, path: &Path, reporter: Option<F>) -> PathBuf 
+    where F: Fn(&str) + Clone
+    {
+        let has_filename_placeholder = rule.target.contains("${ai_name}") 
+                                      || rule.target.contains("${ext}")
+                                      || rule.target.contains("${name}")
+                                      || rule.target.contains("${filename}");
+
+        let resolved_target = self.resolve_placeholders(rule, path, reporter);
         
+        if has_filename_placeholder {
+            if Path::new(&resolved_target).is_absolute() {
+                PathBuf::from(resolved_target)
+            } else {
+                self.base_dir.join(resolved_target)
+            }
+        } else {
+            let target_dir = if Path::new(&resolved_target).is_absolute() {
+                PathBuf::from(resolved_target)
+            } else {
+                self.base_dir.join(resolved_target)
+            };
+            target_dir.join(path.file_name().unwrap())
+        }
+    }
+
+    pub fn resolve_placeholders<F>(&self, rule: &Rule, path: &Path, reporter: Option<F>) -> String 
+    where F: Fn(&str) + Clone
+    {
+        let mut resolved = rule.target.clone();
+        
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        let filename = path.file_name().unwrap_or_default().to_string_lossy();
+
+        // Basic filename placeholders
+        resolved = resolved.replace("${name}", &stem);
+        resolved = resolved.replace("${filename}", &filename);
+
+        // Check if we need AI renaming
+        if resolved.contains("${ai_name}") {
+            if let (Some(filename_str), Some(ai_oracle)) = (path.file_name().and_then(|s| s.to_str()), self.ai.as_ref()) {
+                let context = rule.ai_rename_prompt.as_deref()
+                    .or(rule.ai_prompt.as_deref())
+                    .unwrap_or("Suggest a descriptive filename without extension");
+                
+                // Read snippet for better context
+                let content_snippet = if let Ok(mut file) = std::fs::File::open(path) {
+                    let mut buffer = [0; 512];
+                    if let Ok(n) = file.read(&mut buffer) {
+                        Some(String::from_utf8_lossy(&buffer[..n]).to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let suggested = ai_oracle.suggest_name(filename_str, content_snippet.as_deref(), context, reporter);
+                resolved = resolved.replace("${ai_name}", &suggested);
+            } else {
+                // Fallback to original stem if AI is disabled or unavailable
+                resolved = resolved.replace("${ai_name}", &stem);
+            }
+        }
+
         // Extension replacement
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             resolved = resolved.replace("${ext}", ext);
@@ -95,7 +155,10 @@ impl Engine {
         Ok(hex::encode(hasher.finalize()))
     }
 
-    pub fn dry_run(&self) -> anyhow::Result<Vec<Operation>> {
+    pub fn dry_run<F>(&self, on_progress: F) -> anyhow::Result<Vec<Operation>>
+    where
+        F: Fn(usize, usize, String) + Send + Sync + Clone,
+    {
         let files: Vec<PathBuf> = WalkDir::new(&self.base_dir)
             .max_depth(1)
             .into_iter()
@@ -104,44 +167,60 @@ impl Engine {
             .map(|e| e.path().to_path_buf())
             .collect();
 
+        let total = files.len();
+        let current = Arc::new(Mutex::new(0));
+
         let seen_hashes: Arc<Mutex<HashMap<String, PathBuf>>> =
             Arc::new(Mutex::new(HashMap::new()));
+        
+        // We need to clone the closure if we want to use it in into_par_iter
+        // but closures usually aren't Clone. Instead, use a shared wrapper.
 
         let ops: Vec<Operation> = files
             .into_par_iter()
-            .filter_map(|path| {
-                if let Some(rule) = self.match_rule(&path) {
-                    let resolved_target = self.resolve_placeholders(&rule.target, &path);
-                    let target_dir = if Path::new(&resolved_target).is_absolute() {
-                        PathBuf::from(resolved_target)
-                    } else {
-                        self.base_dir.join(resolved_target)
-                    };
-                    let target_path = target_dir.join(path.file_name().unwrap());
+            .enumerate()
+            .filter_map(|(_idx, path)| {
+                let progress_cb = on_progress.clone();
+                let reporter = {
+                    let progress_cb = progress_cb.clone();
+                    let current = current.clone();
+                    move |msg: &str| {
+                        let count = current.lock().unwrap();
+                        progress_cb(*count, total, msg.to_string());
+                    }
+                };
+                
+                let res = if let Some(rule) = self.match_rule(&path, Some(reporter.clone())) {
+                    let target_path = self.resolve_target_path(rule, &path, Some(reporter));
 
                     // Deduplication Logic
-                    if let Ok(hash) = Self::calculate_hash(&path) {
+                    let op_type = if let Ok(hash) = Self::calculate_hash(&path) {
                         let mut hashes = seen_hashes.lock().unwrap();
                         if let Some(original_target) = hashes.get(&hash) {
-                            return Some(Operation {
-                                from: path,
-                                to: target_path,
-                                op_type: OpType::HardLink(original_target.clone()),
-                                rule_name: Some(rule.name.clone()),
-                            });
+                            OpType::HardLink(original_target.clone())
                         } else {
                             hashes.insert(hash, target_path.clone());
+                            OpType::Move
                         }
-                    }
+                    } else {
+                        OpType::Move
+                    };
 
-                    return Some(Operation {
-                        from: path,
+                    Some(Operation {
+                        from: path.clone(),
                         to: target_path,
-                        op_type: OpType::Move,
+                        op_type,
                         rule_name: Some(rule.name.clone()),
-                    });
-                }
-                None
+                    })
+                } else {
+                    None
+                };
+
+                let mut count = current.lock().unwrap();
+                *count += 1;
+                progress_cb(*count, total, format!("Analyzed: {:?}", path.file_name().unwrap_or_default()));
+                
+                res
             })
             .collect();
 
@@ -152,7 +231,7 @@ impl Engine {
     where
         F: FnMut(usize, usize, String),
     {
-        let ops = self.dry_run()?;
+        let ops = self.dry_run(|_, _, _| {})?;
         let total = ops.len();
         let mut journal = JournalEntry::new();
         let options = CopyOptions::new();
@@ -218,7 +297,7 @@ impl Engine {
         }
 
         // We need the rule to check for conflict strategy
-        let rule = self.match_rule(&op.from).unwrap();
+        let rule = self.match_rule::<fn(&str)>(&op.from, None).unwrap();
         let strategy = rule.conflict.as_ref().cloned().unwrap_or_default();
 
         match strategy {
@@ -245,7 +324,9 @@ impl Engine {
         }
     }
 
-    pub fn match_rule(&self, path: &Path) -> Option<&Rule> {
+    pub fn match_rule<F>(&self, path: &Path, reporter: Option<F>) -> Option<&Rule> 
+    where F: Fn(&str) + Clone
+    {
         let metadata = std::fs::metadata(path).ok()?;
         let size = metadata.len();
 
@@ -318,6 +399,31 @@ impl Engine {
                         if re.is_match(filename) {
                             matched = true;
                         }
+                    }
+                }
+            }
+
+            // Check AI-based matching (Experimental/Smart)
+            if !matched {
+                if let (Some(ai_prompt), Some(filename), Some(ai_oracle)) = (&rule.ai_prompt, path.file_name().and_then(|s| s.to_str()), self.ai.as_ref()) {
+                    // Try to read a snippet of content if it's likely text
+                    let content_snippet = if let Ok(mut file) = std::fs::File::open(path) {
+                        let mut buffer = [0; 512];
+                        if let Ok(n) = file.read(&mut buffer) {
+                            if std::str::from_utf8(&buffer[..n]).is_ok() {
+                                Some(String::from_utf8_lossy(&buffer[..n]).to_string())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    if ai_oracle.matches_prompt(filename, content_snippet.as_deref(), ai_prompt, reporter.clone()) {
+                        matched = true;
                     }
                 }
             }

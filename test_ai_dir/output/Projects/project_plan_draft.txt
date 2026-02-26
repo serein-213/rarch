@@ -1,0 +1,1 @@
+This is a detailed plan for the new cloud architecture project.

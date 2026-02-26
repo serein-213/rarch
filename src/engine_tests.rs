@@ -1,25 +1,31 @@
 #[cfg(test)]
 mod tests {
     use crate::engine::Engine;
-    use crate::config::{Config, Rule, ConflictStrategy};
-    use crate::journal::{Operation, OpType};
-    use std::path::{PathBuf, Path};
+    use crate::config::{Config, Rule};
+    use std::path::{PathBuf};
     use tempfile::tempdir;
     use std::fs;
 
     #[test]
     fn test_resolve_placeholders() {
-        let config = Config { rules: vec![] };
+        let config = Config::default();
         let engine = Engine::new(config, PathBuf::from("."));
         let path = PathBuf::from("test.txt");
         
-        let rule_target = "${ext}/file";
-        let resolved = engine.resolve_placeholders(rule_target, &path);
-        assert_eq!(resolved, "txt/file");
+        let mut rule = Rule::default();
+        rule.target = "${ext}/${name}_copy".to_string();
+        let resolved = engine.resolve_placeholders::<fn(&str)>(&rule, &path, None);
+        assert_eq!(resolved, "txt/test_copy");
 
-        let rule2_target = "${year}-${month}";
-        let resolved = engine.resolve_placeholders(rule2_target, &path);
+        let mut rule2 = Rule::default();
+        rule2.target = "${year}-${month}".to_string();
+        let resolved = engine.resolve_placeholders::<fn(&str)>(&rule2, &path, None);
         assert!(resolved.contains("${year}") || resolved.len() == 7);
+
+        let mut rule3 = Rule::default();
+        rule3.target = "backup/${filename}".to_string();
+        let resolved = engine.resolve_placeholders::<fn(&str)>(&rule3, &path, None);
+        assert_eq!(resolved, "backup/test.txt");
     }
 
     #[test]
@@ -34,16 +40,19 @@ mod tests {
             target: "src/".into(),
             ..Default::default()
         };
-        let config = Config { rules: vec![rule] };
+        let config = Config { 
+            rules: vec![rule],
+            ..Default::default()
+        };
         let engine = Engine::new(config, dir.path().to_path_buf());
         
-        let matched = engine.match_rule(&file_path);
+        let matched = engine.match_rule::<fn(&str)>(&file_path, None);
         assert!(matched.is_some());
         assert_eq!(matched.unwrap().name, "test");
 
         let other_path = dir.path().join("Cargo.toml");
         fs::write(&other_path, "[package]").expect("Failed to write to file");
-        let no_match = engine.match_rule(&other_path);
+        let no_match = engine.match_rule::<fn(&str)>(&other_path, None);
         assert!(no_match.is_none());
     }
 
@@ -61,10 +70,13 @@ mod tests {
             target: "images/".into(),
             ..Default::default()
         };
-        let config = Config { rules: vec![rule] };
+        let config = Config { 
+            rules: vec![rule],
+            ..Default::default()
+        };
         let engine = Engine::new(config, dir.path().to_path_buf());
         
-        let matched = engine.match_rule(&file_path);
+        let matched = engine.match_rule::<fn(&str)>(&file_path, None);
         assert!(matched.is_some());
         assert_eq!(matched.unwrap().name, "image_rule");
     }
@@ -83,10 +95,13 @@ mod tests {
             target: "docs/".into(),
             ..Default::default()
         };
-        let config = Config { rules: vec![rule] };
+        let config = Config { 
+            rules: vec![rule],
+            ..Default::default()
+        };
         let engine = Engine::new(config, dir.path().to_path_buf());
         
-        let matched = engine.match_rule(&file_path);
+        let matched = engine.match_rule::<fn(&str)>(&file_path, None);
         assert!(matched.is_some());
         assert_eq!(matched.unwrap().name, "doc_rule");
     }

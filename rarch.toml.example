@@ -20,3 +20,20 @@ name = "Big Binaries"
 mime = "application/x-executable" # The robust way: Match exact MIME types
 min_size = 10485760 # 10MB - only match large files
 target = "organized/large_binaries"
+
+# --- AI Integration ---
+# (Requires local Ollama/OpenAI-compatible server)
+#
+# ai_api_base = "http://localhost:11434/v1"
+# ai_model = "qwen2:0.5b"
+#
+# [[rules]]
+# name = "Smart Classification"
+# ai_prompt = "Is this a business invoice or bill?"
+# target = "Finance/Invoices"
+#
+# [[rules]]
+# name = "Smart Renaming"
+# ai_rename_prompt = "Suggest a filename (Organization_Date)."
+# target = "organized/${ai_name}.${ext}"
+# extensions = ["txt", "pdf"]

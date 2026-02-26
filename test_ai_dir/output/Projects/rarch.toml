@@ -1,0 +1,17 @@
+ai_api_base = "http://localhost:11434/v1"
+ai_model = "qwen2:0.5b"
+
+[[rules]]
+name = "Projects-Tech"
+ai_prompt = "Technical planning, cloud architecture, or engineering design documents."
+target = "output/Projects/"
+
+[[rules]]
+name = "Finance-Invoices"
+ai_prompt = "Invoices, billing, or financial receipts."
+target = "output/Finance/"
+
+[[rules]]
+name = "Space-Trash"
+ai_prompt = "Something about space exploration or aliens."
+target = "output/Space/"

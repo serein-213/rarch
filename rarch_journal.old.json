@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-02-27T01:39:51.269746159+08:00",
+  "operations": [
+    {
+      "from": "test_ai_dir/project_plan_draft.txt",
+      "to": "test_ai_dir/output/Projects/project_plan_draft.txt",
+      "op_type": "Move",
+      "rule_name": "Projects-Tech"
+    },
+    {
+      "from": "test_ai_dir/invoice_2024.pdf",
+      "to": "test_ai_dir/output/Projects/invoice_2024.pdf",
+      "op_type": "Move",
+      "rule_name": "Projects-Tech"
+    },
+    {
+      "from": "test_ai_dir/rarch.toml",
+      "to": "test_ai_dir/output/Projects/rarch.toml",
+      "op_type": "Move",
+      "rule_name": "Projects-Tech"
+    }
+  ]
+}
