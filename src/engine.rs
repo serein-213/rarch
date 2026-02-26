@@ -115,11 +115,45 @@ impl Engine {
                     None
                 };
 
-                let suggested = ai_oracle.suggest_name(filename_str, content_snippet.as_deref(), context, reporter);
+                let suggested = ai_oracle.suggest_name(filename_str, content_snippet.as_deref(), context, reporter.clone());
                 resolved = resolved.replace("${ai_name}", &suggested);
             } else {
                 // Fallback to original stem if AI is disabled or unavailable
                 resolved = resolved.replace("${ai_name}", &stem);
+            }
+        }
+
+        // Process custom AI extractions
+        if let Some(extractions) = &rule.ai_extract {
+            if let (Some(filename_str), Some(ai_oracle)) = (path.file_name().and_then(|s| s.to_str()), self.ai.as_ref()) {
+                let content_snippet = if let Ok(mut file) = std::fs::File::open(path) {
+                    let mut buffer = [0; 1024]; // Read a bit more for extraction
+                    if let Ok(n) = file.read(&mut buffer) {
+                        Some(String::from_utf8_lossy(&buffer[..n]).to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                for (key, prompt) in extractions {
+                    let placeholder = format!("${{{}}}", key);
+                    if resolved.contains(&placeholder) {
+                        let extracted = ai_oracle.extract_info(filename_str, content_snippet.as_deref(), prompt, reporter.clone())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        
+                        // Clean up the extracted value to be safe for paths
+                        let safe_extracted = extracted.replace("/", "_").replace("\\", "_");
+                        resolved = resolved.replace(&placeholder, &safe_extracted);
+                    }
+                }
+            } else {
+                // Fallback if AI is disabled
+                for key in extractions.keys() {
+                    let placeholder = format!("${{{}}}", key);
+                    resolved = resolved.replace(&placeholder, "unknown");
+                }
             }
         }
 

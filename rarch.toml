@@ -1,9 +1,9 @@
 [[rules]]
-name = "照片"
+name = "Picture"
 extensions = ["jpg", "png", "heic"]
 target = "Pictures/Sorted"
 
 [[rules]]
-name = "文档"
+name = "Document"
 extensions = ["pdf", "docx"]
 target = "Documents/Work"

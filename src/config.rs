@@ -35,6 +35,7 @@ pub struct Rule {
     pub regex: Option<String>,
     pub ai_prompt: Option<String>,
     pub ai_rename_prompt: Option<String>,
+    pub ai_extract: Option<std::collections::HashMap<String, String>>,
     pub target: String,
     pub min_size: Option<u64>,
     pub max_age: Option<String>,

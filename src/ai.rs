@@ -206,13 +206,69 @@ Rules:
         Path::new(file_name).file_stem().unwrap_or_default().to_string_lossy().to_string()
     }
 
-    #[cfg(not(feature = "ai"))]
-    pub fn suggest_name<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> String 
+    /// Extract structured information from the file content based on a prompt.
+    /// Returns the extracted string, or None if extraction fails.
+    #[cfg(feature = "ai")]
+    pub fn extract_info<F>(&self, file_name: &str, content_snippet: Option<&str>, prompt: &str, reporter: Option<F>) -> Option<String> 
     where F: Fn(&str)
     {
         if let Some(ref cb) = reporter {
-            cb(&format!("[AI-Rename] Skipped (AI feature disabled) for '{}'", file_name));
+            cb(&format!("[AI-Extract] Analyzing '{}'...", file_name));
         }
-        Path::new(file_name).file_stem().unwrap_or_default().to_string_lossy().to_string()
+        let system_msg = "You are a precise data extraction assistant. Your task is to extract specific information from the provided file context based on the user's goal.
+Rules:
+1. Output ONLY the extracted value. No explanations, no quotes, no markdown.
+2. If the information cannot be found or inferred, output exactly 'UNKNOWN'.
+3. Keep the output as concise as possible.";
+        
+        let mut user_msg = format!("Extraction Goal: '{}'\nFile Name: '{}'", prompt, file_name);
+        if let Some(snippet) = content_snippet {
+            user_msg.push_str(&format!("\nFile Content Snippet: '{}...'", snippet.chars().take(400).collect::<String>()));
+        }
+        user_msg.push_str("\nExtracted Value:");
+
+        let body = ChatRequest {
+            model: self.model.clone(),
+            temperature: 0.1,
+            max_tokens: 50,
+            messages: vec![
+                Message { role: "system".into(), content: system_msg.into() },
+                Message { role: "user".into(), content: user_msg },
+            ],
+        };
+
+        let url = format!("{}/chat/completions", self.api_base);
+        match self.client.post(url).json(&body).send() {
+            Ok(res) => {
+                if let Ok(data) = res.json::<ChatResponse>() {
+                    let ans = data.choices.first().map(|c| c.message.content.trim().to_string());
+                    if let Some(a) = ans {
+                        if a == "UNKNOWN" || a.is_empty() {
+                            if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Failed to extract for '{}'", file_name)); }
+                            return None;
+                        }
+                        
+                        // Clean up the extracted value
+                        let clean_val = a.replace("\n", " ").trim().to_string();
+                        if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Done: '{}' -> '{}'", file_name, clean_val)); }
+                        return Some(clean_val);
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(ref cb) = reporter { cb(&format!("[AI-Extract] Error: {}", e)); }
+            }
+        }
+        None
+    }
+
+    #[cfg(not(feature = "ai"))]
+    pub fn extract_info<F>(&self, file_name: &str, _content_snippet: Option<&str>, _prompt: &str, reporter: Option<F>) -> Option<String> 
+    where F: Fn(&str)
+    {
+        if let Some(ref cb) = reporter {
+            cb(&format!("[AI-Extract] Skipped (AI feature disabled) for '{}'", file_name));
+        }
+        None
     }
 }
